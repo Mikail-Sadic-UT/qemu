@@ -322,16 +322,16 @@ static qemu_irq aspeed_soc_ast2700_get_irq_index(AspeedSoCState *s, int dev,
 }
 
 static uint64_t aspeed_ram_capacity_read(void *opaque, hwaddr addr,
-                                                    unsigned int size)
+                                         unsigned int size)
 {
     qemu_log_mask(LOG_GUEST_ERROR,
                   "%s: DRAM read out of ram size, addr:0x%" PRIx64 "\n",
-                   __func__, addr);
+                  __func__, addr);
     return 0;
 }
 
 static void aspeed_ram_capacity_write(void *opaque, hwaddr addr, uint64_t data,
-                                                unsigned int size)
+                                      unsigned int size)
 {
     AspeedSoCState *s = ASPEED_SOC(opaque);
     ram_addr_t ram_size;
@@ -932,7 +932,7 @@ static void aspeed_soc_ast2700_realize(DeviceState *dev, Error **errp)
                         sc->memmap[ASPEED_DEV_MII1 + i]);
     }
 
-    /* Watch dog */
+    /* Watchdog */
     for (i = 0; i < sc->wdts_num; i++) {
         AspeedWDTClass *awc = ASPEED_WDT_GET_CLASS(&s->wdt[i]);
         hwaddr wdt_offset = sc->memmap[ASPEED_DEV_WDT] + i * awc->iosize;
@@ -1140,12 +1140,7 @@ static void aspeed_soc_ast2700_realize(DeviceState *dev, Error **errp)
         }
     }
 
-    /*
-     * FSI / OPB. Reuse the AST2600 apb2opb model; the kernel binds its
-     * "aspeed,ast2600-fsi-master" driver to it via the DTS. This is enough to
-     * enumerate a local CFAM so rbmc-cfamd does not abort on "Local CFAM is
-     * not accessible". IRQ left unconnected for now (CFAM scan is polled).
-     */
+    /* FSI / OPB */
     for (i = 0; i < ARRAY_SIZE(s->fsi); i++) {
         if (!sysbus_realize(SYS_BUS_DEVICE(&s->fsi[i]), errp)) {
             return;

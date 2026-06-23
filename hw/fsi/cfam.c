@@ -3,11 +3,6 @@
  * Copyright (C) 2024 IBM Corp.
  *
  * IBM Common FRU Access Macro (CFAM)
- *
- * Models the Linux FSI responder framework (drivers/fsi/responder.c).
- * SID bits [22:21] are folded so SID_BREAK (0x600000) and SID 0 share
- * the same register space.  A CFAM-S mailbox engine (id 0x14) is included
- * so fsi-mbox-cfam-s.c binds and exposes /dev/fsi/mbox0.
  */
 
 #include "qemu/osdep.h"
@@ -43,10 +38,8 @@
 #define CFAM_MBOX_SCRATCH_BASE   (CFAM_MBOX_BASE + CFAM_MBOX_SCRATCH_OFF)
 #define CFAM_MBOX_SCRATCH_NUM    5          /* regs 0..4 (driver allows <= 4) */
 
-/* Mailbox scratchpad; must retain state for read-modify-write. */
 static uint32_t cfam_mbox_scratch[CFAM_MBOX_SCRATCH_NUM];
 
-/* CRC4 matching Linux lib/crc4.c: poly 0b10111, table-driven, MSB first. */
 static uint8_t cfam_crc4(uint8_t c, uint64_t x, int bits)
 {
     static const uint8_t tab[16] = {
@@ -63,7 +56,6 @@ static uint8_t cfam_crc4(uint8_t c, uint64_t x, int bits)
     return c;
 }
 
-/* Build a config-table word; appends CRC4 in the low nibble. */
 static uint32_t cfam_cfg_word(uint32_t fields)
 {
     return fields | cfam_crc4(0, fields >> 4, 28);

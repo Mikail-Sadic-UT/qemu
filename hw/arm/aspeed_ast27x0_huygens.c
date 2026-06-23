@@ -15,26 +15,13 @@
 #include "hw/i2c/i2c_mux_pca954x.h"
 #include "hw/sensor/tmp105.h"
 
-/* Currently based on AST2700 evb hardware value */
-/* Controls Boot source, clk freq, pin multiplex, mem config, periphs, sercurity */
+/* SCU HW Strap1 */
+#define HUYGENS_BMC_HW_STRAP1 0x00000800
+/* SCUIO HW Strap1 */
+#define HUYGENS_BMC_HW_STRAP2 0x00000700
 
-#define HUYGENS_BMC_HW_STRAP1 0x00000800    /* SCU HW Strap1 */
-#define HUYGENS_BMC_HW_STRAP2 0x00000700    /* SCUIO HW Strap1 */
-
-/*
- * Huygens System VPD - IPZ format, 2048 bytes.
- *
- * Records: VHDR, VTOC (7 entries), VINI, VMPU, VSBP, VSYS, UTIL, DINF, VCEN.
- * VSYS and VCEN are required for rbmctool to report Role: Active.
- *
- * To regenerate sanitized binary: scripts/sanitize_vpd.py (sources VPD/images/200c8e85...)
- * To recompute ECC:               scripts/recompute_vpd_ecc.c
- *   Build: gcc -o recompute_vpd_ecc scripts/recompute_vpd_ecc.c
- *   Run:   ./recompute_vpd_ecc VPD/images/huygens_fake_sysvpd.bin <output.bin>
- */
+/* 2048-byte IPZ VPD image (VHDR, VTOC, VINI, VMPU, VSBP, VSYS, UTIL, DINF, VCEN + ECC) */
 static const uint8_t huygens_bmc_fruid[] = {
-    /* 2048-byte sanitized IPZ VPD with recomputed ECC bytes. */
-    /* Records: VHDR VTOC VINI VMPU VSBP VSYS UTIL DINF VCEN + ECC area */
     0x00, 0x0f, 0x17, 0xba, 0x3a, 0xc9, 0x32, 0x31, 0x49, 0xb2, 0xde, 0x84,
     0x28, 0x00, 0x52, 0x54, 0x04, 0x56, 0x48, 0x44, 0x52, 0x56, 0x44, 0x02,
     0x30, 0x31, 0x50, 0x54, 0x0e, 0x56, 0x54, 0x4f, 0x43, 0xd5, 0x00, 0x37,
@@ -134,7 +121,7 @@ static const uint8_t huygens_bmc_fruid[] = {
     0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x46, 0x43, 0x08, 0x20, 0x20,
     0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x52, 0x47, 0x04, 0x20, 0x20, 0x20,
     0x20, 0x52, 0x42, 0x04, 0x20, 0x20, 0x20, 0x20, 0x50, 0x46, 0x03, 0x00,
-    /* --- ECC area (per-record ECC, VTOC ECC, padding) --- */
+    /* ECC area */
     0x00, 0x00, 0x78, 0x4d, 0x5d, 0x84, 0x8c, 0x0a, 0xf9, 0xed, 0x3d, 0x96,
     0x11, 0x4a, 0x45, 0x9a, 0xb6, 0xb2, 0xd9, 0x19, 0x43, 0x05, 0x0f, 0xdd,
     0xb5, 0xf9, 0x3d, 0x5b, 0x81, 0xb3, 0x79, 0xcb, 0x19, 0x48, 0xbb, 0xa2,
@@ -196,7 +183,7 @@ static void huygens_bmc_i2c_init(AspeedMachineState *bmc)
 }
 
 static void aspeed_machine_huygens_class_init(ObjectClass *oc,
-                                                    const void *data)
+                                              const void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
     AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
