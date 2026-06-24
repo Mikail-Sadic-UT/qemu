@@ -202,6 +202,7 @@ static void aspeed_machine_huygens_class_init(ObjectClass *oc,
     amc->vbootrom = true;
     mc->default_ram_size = 2 * GiB;
     aspeed_machine_class_init_cpus_defaults(mc);
+    aspeed_machine_ast2600_class_emmc_init(oc);
 }
 
 static const TypeInfo aspeed_ast27x0_huygens_types[] = {
