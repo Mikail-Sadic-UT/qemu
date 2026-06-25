@@ -14,27 +14,27 @@
 #include "hw/core/qdev-properties.h"
 
 /* bits [22:21] are the slave ID, low 21 bits address registers within it */
-#define CFAM_SID_MASK 0x1fffff
-#define CFAM_WINDOW_SIZE 0x800000 /* 8 MiB per slave, covers SID 0..3 */
+#define CFAM_SID_MASK       0x1fffff
+#define CFAM_WINDOW_SIZE    0x800000 /* 8 MiB per slave, covers SID 0..3 */
 
 #define CFAM_RESPONDER_BASE 0x400 /* == FSI_RESPONDER_PAGE_SIZE */
 
 /* Config-table word fields (see Linux fsi-master.h) */
-#define CFAM_CONF_NEXT (1u << 31)
-#define CFAM_CONF_SLOTS(n) (((n) & 0xff) << 16)
-#define CFAM_CONF_VERSION(v) (((v) & 0xf) << 12)
-#define CFAM_CONF_TYPE(t) (((t) & 0xff) << 4)
-#define CFAM_CHIP_ID_MAJOR(m) (((m) & 0xf) << 8)
+#define CFAM_CONF_NEXT          (1u << 31)
+#define CFAM_CONF_SLOTS(n)      (((n) & 0xff) << 16)
+#define CFAM_CONF_VERSION(v)    (((v) & 0xf) << 12)
+#define CFAM_CONF_TYPE(t)       (((t) & 0xff) << 4)
+#define CFAM_CHIP_ID_MAJOR(m)   (((m) & 0xf) << 8)
 
 /* Engine IDs (include/linux/fsi.h) */
-#define FSI_ENGINE_ID_RESPONDER 0x3
-#define FSI_ENGINE_ID_MBOXV1 0x14
-#define FSI_CHIP_ID_MAJOR_CFAM_S 0x9 /* major == 9 -> CFAM-S */
+#define FSI_ENGINE_ID_RESPONDER     0x3
+#define FSI_ENGINE_ID_MBOXV1        0x14
+#define FSI_CHIP_ID_MAJOR_CFAM_S    0x9 /* major == 9 -> CFAM-S */
 
 /* Engine layout: 0x000 config table, 0x400 responder, 0x800 mbox */
-#define CFAM_MBOX_BASE 0x800
-#define CFAM_MBOX_SCRATCH_OFF 0xe0
-#define CFAM_MBOX_SCRATCH_BASE (CFAM_MBOX_BASE + CFAM_MBOX_SCRATCH_OFF)
+#define CFAM_MBOX_BASE          0x800
+#define CFAM_MBOX_SCRATCH_OFF   0xe0
+#define CFAM_MBOX_SCRATCH_BASE  (CFAM_MBOX_BASE + CFAM_MBOX_SCRATCH_OFF)
 
 static uint8_t cfam_crc4(uint8_t c, uint64_t x, int bits)
 {
