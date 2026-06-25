@@ -1,44 +1,40 @@
 /*
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * IBM Common FRU Access Macro (CFAM)
+ *
  * Copyright (C) 2024 IBM Corp.
  *
- * IBM Common FRU Access Macro (CFAM)
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "trace.h"
-
 #include "hw/fsi/cfam.h"
 #include "hw/fsi/fsi.h"
-
 #include "hw/core/qdev-properties.h"
 
-/* SID in bits [22:21]; map 8 MiB so SID_BREAK (0x600000) is covered. */
-#define CFAM_SID_MASK            0x1fffff   /* low 21 bits within a slave */
-#define CFAM_WINDOW_SIZE         0x800000   /* 8 MiB, covers SID 0..3 */
+/* bits [22:21] are the slave ID, low 21 bits address registers within it */
+#define CFAM_SID_MASK 0x1fffff
+#define CFAM_WINDOW_SIZE 0x800000 /* 8 MiB per slave, covers SID 0..3 */
 
-#define CFAM_RESPONDER_BASE      0x400      /* == FSI_RESPONDER_PAGE_SIZE */
+#define CFAM_RESPONDER_BASE 0x400 /* == FSI_RESPONDER_PAGE_SIZE */
 
-/* Config-table word fields (see Linux responder-regs.h) */
-#define CFAM_CONF_NEXT           (1u << 31)
-#define CFAM_CONF_SLOTS(n)       (((n) & 0xff) << 16)
-#define CFAM_CONF_VERSION(v)     (((v) & 0xf) << 12)
-#define CFAM_CONF_TYPE(t)        (((t) & 0xff) << 4)
-#define CFAM_CHIP_ID_MAJOR(m)    (((m) & 0xf) << 8)
+/* Config-table word fields (see Linux fsi-master.h) */
+#define CFAM_CONF_NEXT (1u << 31)
+#define CFAM_CONF_SLOTS(n) (((n) & 0xff) << 16)
+#define CFAM_CONF_VERSION(v) (((v) & 0xf) << 12)
+#define CFAM_CONF_TYPE(t) (((t) & 0xff) << 4)
+#define CFAM_CHIP_ID_MAJOR(m) (((m) & 0xf) << 8)
 
-/* engine ids (include/linux/fsi.h) */
-#define FSI_ENGINE_ID_RESPONDER  0x3
-#define FSI_ENGINE_ID_MBOXV1     0x14
-#define FSI_CHIP_ID_MAJOR_CFAM_S 0x9        /* major == 9 -> CFAM-S */
+/* Engine IDs (include/linux/fsi.h) */
+#define FSI_ENGINE_ID_RESPONDER 0x3
+#define FSI_ENGINE_ID_MBOXV1 0x14
+#define FSI_CHIP_ID_MAJOR_CFAM_S 0x9 /* major == 9 -> CFAM-S */
 
-/* Engine layout (folded): 0x000 config table, 0x400 responder, 0x800 mbox. */
-#define CFAM_MBOX_BASE           0x800
-#define CFAM_MBOX_SCRATCH_OFF    0xe0
-#define CFAM_MBOX_SCRATCH_BASE   (CFAM_MBOX_BASE + CFAM_MBOX_SCRATCH_OFF)
-#define CFAM_MBOX_SCRATCH_NUM    5          /* regs 0..4 (driver allows <= 4) */
-
-static uint32_t cfam_mbox_scratch[CFAM_MBOX_SCRATCH_NUM];
+/* Engine layout: 0x000 config table, 0x400 responder, 0x800 mbox */
+#define CFAM_MBOX_BASE 0x800
+#define CFAM_MBOX_SCRATCH_OFF 0xe0
+#define CFAM_MBOX_SCRATCH_BASE (CFAM_MBOX_BASE + CFAM_MBOX_SCRATCH_OFF)
 
 static uint8_t cfam_crc4(uint8_t c, uint64_t x, int bits)
 {
@@ -63,14 +59,14 @@ static uint32_t cfam_cfg_word(uint32_t fields)
 
 static uint64_t fsi_cfam_read(void *opaque, hwaddr addr, unsigned size)
 {
+    FSICFAMState *cfam = FSI_CFAM(opaque);
     uint32_t off = (uint32_t)addr & CFAM_SID_MASK;
     uint32_t val = 0;
 
     if (off < CFAM_RESPONDER_BASE) {
-        /* config table */
         switch (off) {
         case 0x00:
-            /* chip-id word: NEXT set, MAJOR=9 (CFAM-S) */
+            /* chip-id: NEXT set, MAJOR=9 (CFAM-S) */
             val = cfam_cfg_word(CFAM_CONF_NEXT |
                                 CFAM_CHIP_ID_MAJOR(FSI_CHIP_ID_MAJOR_CFAM_S));
             break;
@@ -86,15 +82,11 @@ static uint64_t fsi_cfam_read(void *opaque, hwaddr addr, unsigned size)
                                 CFAM_CONF_TYPE(FSI_ENGINE_ID_MBOXV1));
             break;
         default:
-            val = 0;
             break;
         }
     } else if (off >= CFAM_MBOX_SCRATCH_BASE &&
                off < CFAM_MBOX_SCRATCH_BASE + CFAM_MBOX_SCRATCH_NUM * 4) {
-        /* mailbox scratchpad */
-        val = cfam_mbox_scratch[(off - CFAM_MBOX_SCRATCH_BASE) / 4];
-    } else {
-        val = 0;
+        val = cfam->mbox_scratch[(off - CFAM_MBOX_SCRATCH_BASE) / 4];
     }
 
     trace_fsi_cfam_config_read(addr, size);
@@ -104,13 +96,13 @@ static uint64_t fsi_cfam_read(void *opaque, hwaddr addr, unsigned size)
 static void fsi_cfam_write(void *opaque, hwaddr addr, uint64_t data,
                            unsigned size)
 {
+    FSICFAMState *cfam = FSI_CFAM(opaque);
     uint32_t off = (uint32_t)addr & CFAM_SID_MASK;
 
     if (off >= CFAM_MBOX_SCRATCH_BASE &&
         off < CFAM_MBOX_SCRATCH_BASE + CFAM_MBOX_SCRATCH_NUM * 4) {
-        cfam_mbox_scratch[(off - CFAM_MBOX_SCRATCH_BASE) / 4] = (uint32_t)data;
+        cfam->mbox_scratch[(off - CFAM_MBOX_SCRATCH_BASE) / 4] = (uint32_t)data;
     }
-    /* all other writes are no-ops */
     trace_fsi_cfam_config_write(addr, size, data);
 }
 
@@ -135,7 +127,6 @@ static void fsi_cfam_realize(DeviceState *dev, Error **errp)
 static void fsi_cfam_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
-
     dc->bus_type = TYPE_FSI_BUS;
     dc->realize = fsi_cfam_realize;
 }
