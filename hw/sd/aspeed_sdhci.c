@@ -252,12 +252,6 @@ static void aspeed_2700_sdhci_class_init(ObjectClass *klass, const void *data)
     AspeedSDHCIClass *asc = ASPEED_SDHCI_CLASS(klass);
 
     dc->desc = "ASPEED 2700 SDHCI Controller";
-    /* Disable ADMA2(19), ADMA1(20), SDMA(22), BUS64BIT_V4(27), BUS64BIT(28)
-     * to force PIO mode. QEMU ADMA/SDMA emulation under aarch64 triggers
-     * WARN_ON(sg_cnt != 1) in sdhci_prepare_dma via SWIOTLB multi-segment
-     * DMA mappings, plus multi-millisecond hrtimer stalls from ADMA descriptor
-     * processing. PIO has no DMA mapping at all and is reliable under QEMU.
-     */
     asc->capareg = 0x0000000701a00080;
 }
 

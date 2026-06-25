@@ -20,7 +20,7 @@
 /* SCUIO HW Strap1 */
 #define HUYGENS_BMC_HW_STRAP2 0x00000700
 
-/* 2048-byte IPZ VPD image (VHDR, VTOC, VINI, VMPU, VSBP, VSYS, UTIL, DINF, VCEN + ECC) */
+/* 2048-byte IPZ VPD image (VHDR, VTOC, VINI, VMPU, VSBP, VSYS, UTIL, DINF, VCEN + ECC), sanitized */
 static const uint8_t huygens_bmc_fruid[] = {
     0x00, 0x0f, 0x17, 0xba, 0x3a, 0xc9, 0x32, 0x31, 0x49, 0xb2, 0xde, 0x84,
     0x28, 0x00, 0x52, 0x54, 0x04, 0x56, 0x48, 0x44, 0x52, 0x56, 0x44, 0x02,
@@ -202,7 +202,6 @@ static void aspeed_machine_huygens_class_init(ObjectClass *oc,
     amc->vbootrom = true;
     mc->default_ram_size = 2 * GiB;
     aspeed_machine_class_init_cpus_defaults(mc);
-    aspeed_machine_ast2600_class_emmc_init(oc);
 }
 
 static const TypeInfo aspeed_ast27x0_huygens_types[] = {
