@@ -323,7 +323,6 @@ static qemu_irq aspeed_soc_ast2700_get_irq_index(AspeedSoCState *s, int dev,
 
 static uint64_t aspeed_ram_capacity_read(void *opaque, hwaddr addr,
                                                     unsigned int size)
-
 {
     qemu_log_mask(LOG_GUEST_ERROR,
                   "%s: DRAM read out of ram size, addr:0x%" PRIx64 "\n",
