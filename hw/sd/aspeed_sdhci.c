@@ -252,7 +252,7 @@ static void aspeed_2700_sdhci_class_init(ObjectClass *klass, const void *data)
     AspeedSDHCIClass *asc = ASPEED_SDHCI_CLASS(klass);
 
     dc->desc = "ASPEED 2700 SDHCI Controller";
-    asc->capareg = 0x0000000719f80080;
+    asc->capareg = 0x0000000701a00080;
 }
 
 static const TypeInfo aspeed_sdhci_types[] = {
