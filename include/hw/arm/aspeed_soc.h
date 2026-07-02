@@ -35,6 +35,7 @@
 #include "hw/gpio/aspeed_gpio.h"
 #include "hw/gpio/aspeed_sgpio.h"
 #include "hw/sd/aspeed_sdhci.h"
+#include "hw/ufs/aspeed_ufs.h"
 #include "hw/usb/hcd-ehci.h"
 #include "qom/object.h"
 #include "hw/misc/aspeed_lpc.h"
@@ -118,6 +119,7 @@ struct AspeedSoCState {
     AspeedAPB2OPBState fsi[2];
     AspeedLTPIState ltpi_ctrl[ASPEED_IOEXP_NUM];
     AspeedAST1700SoCState ioexp[ASPEED_IOEXP_NUM];
+    AspeedUFSState ufs;
 };
 
 #define TYPE_ASPEED_SOC "aspeed-soc"
@@ -295,6 +297,7 @@ enum {
     ASPEED_DEV_IOEXP1_INTCIO,
     ASPEED_DEV_IOEXP0_I3C,
     ASPEED_DEV_IOEXP1_I3C,
+    ASPEED_DEV_UFS,
 };
 
 const char *aspeed_soc_cpu_type(const char * const *valid_cpu_types);
