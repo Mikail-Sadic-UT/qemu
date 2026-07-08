@@ -153,6 +153,12 @@ static const uint8_t huygens_bmc_fruid[] = {
 };
 static const size_t huygens_bmc_fruid_len = sizeof(huygens_bmc_fruid);
 
+/* chassis1 VPD: huygens_bmc_fruid with VCEN.FC patched to "2E4C-001" */
+#define HUYGENS_CHASSIS1_FC_OFFSET 0x048a
+static const uint8_t huygens_chassis1_fc[] = {
+    0x32, 0x45, 0x34, 0x43, 0x2d, 0x30, 0x30, 0x31
+};
+
 static void huygens_bmc_i2c_init(AspeedMachineState *bmc)
 {
     AspeedSoCState *soc = bmc->soc;
@@ -161,6 +167,20 @@ static void huygens_bmc_i2c_init(AspeedMachineState *bmc)
     at24c_eeprom_init(aspeed_i2c_get_bus(&soc->i2c, 0), 0x50, 8 * KiB);
 
     /* I2C2: TPM */
+
+    /* I2C5: UCD90320 power sequencer */
+    i2c_slave_create_simple(aspeed_i2c_get_bus(&soc->i2c, 5), "ucd90320", 0x11);
+
+    /* I2C6: chassis1 backplane VPD EEPROM */
+    {
+        uint8_t *ch1 = g_malloc(huygens_bmc_fruid_len);
+        memcpy(ch1, huygens_bmc_fruid, huygens_bmc_fruid_len);
+        memcpy(ch1 + HUYGENS_CHASSIS1_FC_OFFSET,
+               huygens_chassis1_fc, sizeof(huygens_chassis1_fc));
+        at24c_eeprom_init_rom(aspeed_i2c_get_bus(&soc->i2c, 6), 0x50,
+                              8 * KiB, ch1, huygens_bmc_fruid_len);
+        g_free(ch1);
+    }
 
     /* I2C8: System VPD at 0x53 */
     at24c_eeprom_init_rom(aspeed_i2c_get_bus(&soc->i2c, 8), 0x53,
