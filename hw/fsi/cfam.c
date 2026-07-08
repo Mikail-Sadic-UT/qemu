@@ -1,127 +1,148 @@
 /*
- * IBM Common FRU Access Macro (CFAM)
- *
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2024 IBM Corp.
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * IBM Common FRU Access Macro
  */
 
 #include "qemu/osdep.h"
+#include "qemu/units.h"
+
 #include "qapi/error.h"
 #include "trace.h"
+
 #include "hw/fsi/cfam.h"
 #include "hw/fsi/fsi.h"
+
 #include "hw/core/qdev-properties.h"
 
-/* bits [22:21] are the slave ID, low 21 bits address registers within it */
-#define CFAM_SID_MASK       0x1fffff
-#define CFAM_WINDOW_SIZE    0x800000 /* 8 MiB per slave, covers SID 0..3 */
+#define ENGINE_CONFIG_NEXT            BIT(31)
+#define ENGINE_CONFIG_TYPE_PEEK       (0x02 << 4)
+#define ENGINE_CONFIG_TYPE_FSI        (0x03 << 4)
+#define ENGINE_CONFIG_TYPE_SCRATCHPAD (0x06 << 4)
 
-#define CFAM_RESPONDER_BASE 0x400 /* == FSI_RESPONDER_PAGE_SIZE */
+/* Valid, slots, version, type, crc */
+#define CFAM_CONFIG_REG(__VER, __TYPE, __CRC)   \
+    (ENGINE_CONFIG_NEXT       |   \
+     0x00010000               |   \
+     (__VER)                  |   \
+     (__TYPE)                 |   \
+     (__CRC))
 
-/* Config-table word fields (see Linux fsi-master.h) */
-#define CFAM_CONF_NEXT          (1u << 31)
-#define CFAM_CONF_SLOTS(n)      (((n) & 0xff) << 16)
-#define CFAM_CONF_VERSION(v)    (((v) & 0xf) << 12)
-#define CFAM_CONF_TYPE(t)       (((t) & 0xff) << 4)
-#define CFAM_CHIP_ID_MAJOR(m)   (((m) & 0xf) << 8)
+#define TO_REG(x)                          ((x) >> 2)
 
-/* Engine IDs (include/linux/fsi.h) */
-#define FSI_ENGINE_ID_RESPONDER     0x3
-#define FSI_ENGINE_ID_MBOXV1        0x14
-#define FSI_CHIP_ID_MAJOR_CFAM_S    0x9 /* major == 9 -> CFAM-S */
+#define CFAM_CONFIG_CHIP_ID                TO_REG(0x00)
+#define CFAM_CONFIG_PEEK_STATUS            TO_REG(0x04)
+#define CFAM_CONFIG_CHIP_ID_P9             0xc0022d15
+#define CFAM_CONFIG_CHIP_ID_BREAK          0xc0de0000
 
-/* Engine layout: 0x000 config table, 0x400 responder, 0x800 mbox */
-#define CFAM_MBOX_BASE          0x800
-#define CFAM_MBOX_SCRATCH_OFF   0xe0
-#define CFAM_MBOX_SCRATCH_BASE  (CFAM_MBOX_BASE + CFAM_MBOX_SCRATCH_OFF)
-
-static uint8_t cfam_crc4(uint8_t c, uint64_t x, int bits)
+static uint64_t fsi_cfam_config_read(void *opaque, hwaddr addr, unsigned size)
 {
-    static const uint8_t tab[16] = {
-        0x0, 0x7, 0xe, 0x9, 0xb, 0xc, 0x5, 0x2,
-        0x1, 0x6, 0xf, 0x8, 0xa, 0xd, 0x4, 0x3,
-    };
-    int i;
-
-    x &= (1ull << bits) - 1;
-    bits = (bits + 3) & ~0x3;
-    for (i = bits - 4; i >= 0; i -= 4) {
-        c = tab[c ^ ((x >> i) & 0xf)];
-    }
-    return c;
-}
-
-static uint32_t cfam_cfg_word(uint32_t fields)
-{
-    return fields | cfam_crc4(0, fields >> 4, 28);
-}
-
-static uint64_t fsi_cfam_read(void *opaque, hwaddr addr, unsigned size)
-{
-    FSICFAMState *cfam = FSI_CFAM(opaque);
-    uint32_t off = (uint32_t)addr & CFAM_SID_MASK;
-    uint32_t val = 0;
-
-    if (off < CFAM_RESPONDER_BASE) {
-        switch (off) {
-        case 0x00:
-            /* chip-id: NEXT set, MAJOR=9 (CFAM-S) */
-            val = cfam_cfg_word(CFAM_CONF_NEXT |
-                                CFAM_CHIP_ID_MAJOR(FSI_CHIP_ID_MAJOR_CFAM_S));
-            break;
-        case 0x04:
-            /* responder engine entry */
-            val = cfam_cfg_word(CFAM_CONF_NEXT | CFAM_CONF_SLOTS(1) |
-                                CFAM_CONF_VERSION(1) |
-                                CFAM_CONF_TYPE(FSI_ENGINE_ID_RESPONDER));
-            break;
-        case 0x08:
-            /* mailbox engine entry, last (NEXT clear) */
-            val = cfam_cfg_word(CFAM_CONF_SLOTS(1) | CFAM_CONF_VERSION(1) |
-                                CFAM_CONF_TYPE(FSI_ENGINE_ID_MBOXV1));
-            break;
-        default:
-            break;
-        }
-    } else if (off >= CFAM_MBOX_SCRATCH_BASE &&
-               off < CFAM_MBOX_SCRATCH_BASE + CFAM_MBOX_SCRATCH_NUM * 4) {
-        val = cfam->mbox_scratch[(off - CFAM_MBOX_SCRATCH_BASE) / 4];
-    }
-
     trace_fsi_cfam_config_read(addr, size);
-    return val;
+
+    switch (addr) {
+    case 0x00:
+        return CFAM_CONFIG_CHIP_ID_P9;
+    case 0x04:
+        return CFAM_CONFIG_REG(0x1000, ENGINE_CONFIG_TYPE_PEEK, 0xc);
+    case 0x08:
+        return CFAM_CONFIG_REG(0x5000, ENGINE_CONFIG_TYPE_FSI, 0xa);
+    case 0xc:
+        return CFAM_CONFIG_REG(0x1000, ENGINE_CONFIG_TYPE_SCRATCHPAD, 0x7);
+    default:
+        /*
+         * The config table contains different engines from 0xc onwards.
+         * The scratch pad is already added at address 0xc. We need to add
+         * future engines from address 0x10 onwards. Returning 0 as engine
+         * is not implemented.
+         */
+        return 0;
+    }
 }
 
-static void fsi_cfam_write(void *opaque, hwaddr addr, uint64_t data,
-                           unsigned size)
+static void fsi_cfam_config_write(void *opaque, hwaddr addr, uint64_t data,
+                                  unsigned size)
 {
     FSICFAMState *cfam = FSI_CFAM(opaque);
-    uint32_t off = (uint32_t)addr & CFAM_SID_MASK;
 
-    if (off >= CFAM_MBOX_SCRATCH_BASE &&
-        off < CFAM_MBOX_SCRATCH_BASE + CFAM_MBOX_SCRATCH_NUM * 4) {
-        cfam->mbox_scratch[(off - CFAM_MBOX_SCRATCH_BASE) / 4] = (uint32_t)data;
-    }
     trace_fsi_cfam_config_write(addr, size, data);
+
+    switch (TO_REG(addr)) {
+    case CFAM_CONFIG_CHIP_ID:
+    case CFAM_CONFIG_PEEK_STATUS:
+        if (data == CFAM_CONFIG_CHIP_ID_BREAK) {
+            bus_cold_reset(BUS(&cfam->lbus));
+        }
+        break;
+    default:
+        trace_fsi_cfam_config_write_noaddr(addr, size, data);
+    }
 }
 
-static const MemoryRegionOps cfam_ops = {
-    .read = fsi_cfam_read,
-    .write = fsi_cfam_write,
-    .endianness = DEVICE_BIG_ENDIAN,
-    .valid.min_access_size = 1,
+static const struct MemoryRegionOps cfam_config_ops = {
+    .read = fsi_cfam_config_read,
+    .write = fsi_cfam_config_write,
     .valid.max_access_size = 4,
-    .impl.min_access_size = 1,
+    .valid.min_access_size = 4,
     .impl.max_access_size = 4,
+    .impl.min_access_size = 4,
+    .endianness = DEVICE_BIG_ENDIAN,
 };
+
+static uint64_t fsi_cfam_unimplemented_read(void *opaque, hwaddr addr,
+                                            unsigned size)
+{
+    trace_fsi_cfam_unimplemented_read(addr, size);
+
+    return 0;
+}
+
+static void fsi_cfam_unimplemented_write(void *opaque, hwaddr addr,
+                                         uint64_t data, unsigned size)
+{
+    trace_fsi_cfam_unimplemented_write(addr, size, data);
+}
+
+static const struct MemoryRegionOps fsi_cfam_unimplemented_ops = {
+    .read = fsi_cfam_unimplemented_read,
+    .write = fsi_cfam_unimplemented_write,
+    .endianness = DEVICE_BIG_ENDIAN,
+};
+
+static void fsi_cfam_instance_init(Object *obj)
+{
+    FSICFAMState *s = FSI_CFAM(obj);
+
+    object_initialize_child(obj, "scratchpad", &s->scratchpad,
+                            TYPE_FSI_SCRATCHPAD);
+}
 
 static void fsi_cfam_realize(DeviceState *dev, Error **errp)
 {
     FSICFAMState *cfam = FSI_CFAM(dev);
+    FSISlaveState *slave = FSI_SLAVE(dev);
 
-    memory_region_init_io(&cfam->mr, OBJECT(cfam), &cfam_ops, cfam,
-                          TYPE_FSI_CFAM, CFAM_WINDOW_SIZE);
+    /* Each slave has a 2MiB address space */
+    memory_region_init_io(&cfam->mr, OBJECT(cfam), &fsi_cfam_unimplemented_ops,
+                          cfam, TYPE_FSI_CFAM, 2 * MiB);
+
+    qbus_init(&cfam->lbus, sizeof(cfam->lbus), TYPE_FSI_LBUS, DEVICE(cfam),
+              NULL);
+
+    memory_region_init_io(&cfam->config_iomem, OBJECT(cfam), &cfam_config_ops,
+                          cfam, TYPE_FSI_CFAM ".config", 0x400);
+
+    memory_region_add_subregion(&cfam->mr, 0, &cfam->config_iomem);
+    memory_region_add_subregion(&cfam->mr, 0x800, &slave->iomem);
+    memory_region_add_subregion(&cfam->mr, 0xc00, &cfam->lbus.mr);
+
+    /* Add scratchpad engine */
+    if (!qdev_realize(DEVICE(&cfam->scratchpad), BUS(&cfam->lbus), errp)) {
+        return;
+    }
+
+    FSILBusDevice *fsi_dev = FSI_LBUS_DEVICE(&cfam->scratchpad);
+    memory_region_add_subregion(&cfam->lbus.mr, 0, &fsi_dev->iomem);
 }
 
 static void fsi_cfam_class_init(ObjectClass *klass, const void *data)
@@ -134,6 +155,7 @@ static void fsi_cfam_class_init(ObjectClass *klass, const void *data)
 static const TypeInfo fsi_cfam_info = {
     .name = TYPE_FSI_CFAM,
     .parent = TYPE_FSI_SLAVE,
+    .instance_init = fsi_cfam_instance_init,
     .instance_size = sizeof(FSICFAMState),
     .class_init = fsi_cfam_class_init,
 };

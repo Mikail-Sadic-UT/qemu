@@ -186,7 +186,7 @@ static void aspeed_machine_init(MachineState *machine)
     }
     /*
      * Attach the UFS backing drive before realizing the SoC so that
-     * aspeed_ufs_realize() can read the image size and set num_sectors.
+     * the UFS controller can read the drive size during realization.
      */
     {
         DriveInfo *ufs_dinfo = drive_get(IF_NONE, 0, 0);

@@ -571,6 +571,8 @@ static void aspeed_soc_ast2700_init(Object *obj)
                                 TYPE_ASPEED_APB2OPB);
     }
 
+    s->fsi[0].fsi[0].use_cfam_s = true;
+
     object_initialize_child(obj, "dpmcu", &s->dpmcu,
                             TYPE_UNIMPLEMENTED_DEVICE);
     object_initialize_child(obj, "iomem", &s->iomem,

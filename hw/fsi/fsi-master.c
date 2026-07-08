@@ -112,8 +112,6 @@ static void fsi_master_init(Object *o)
 {
     FSIMasterState *s = FSI_MASTER(o);
 
-    object_initialize_child(o, "cfam", &s->cfam, TYPE_FSI_CFAM);
-
     qbus_init(&s->bus, sizeof(s->bus), TYPE_FSI_BUS, DEVICE(s), NULL);
 
     memory_region_init_io(&s->iomem, OBJECT(s), &fsi_master_ops, s,
@@ -125,12 +123,21 @@ static void fsi_master_realize(DeviceState *dev, Error **errp)
 {
     FSIMasterState *s = FSI_MASTER(dev);
 
-    if (!qdev_realize(DEVICE(&s->cfam), BUS(&s->bus), errp)) {
-        return;
+    if (s->use_cfam_s) {
+        object_initialize_child(OBJECT(dev), "cfam-s", &s->cfam_s,
+                                TYPE_FSI_CFAM_S);
+        if (!qdev_realize(DEVICE(&s->cfam_s), BUS(&s->bus), errp)) {
+            return;
+        }
+        memory_region_add_subregion(&s->opb2fsi, 0, &s->cfam_s.mr);
+    } else {
+        object_initialize_child(OBJECT(dev), "cfam", &s->cfam,
+                                TYPE_FSI_CFAM);
+        if (!qdev_realize(DEVICE(&s->cfam), BUS(&s->bus), errp)) {
+            return;
+        }
+        memory_region_add_subregion(&s->opb2fsi, 0, &s->cfam.mr);
     }
-
-    /* address ? */
-    memory_region_add_subregion(&s->opb2fsi, 0, &s->cfam.mr);
 }
 
 static void fsi_master_reset(DeviceState *dev)
