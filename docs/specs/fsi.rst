@@ -120,3 +120,17 @@ from the BMC. (see the `pdbg source repository`_ for more details)
 
 .. _pdbg source repository:
    https://github.com/open-power/pdbg
+
+CFAM-S model
+------------
+
+The CFAM-S is a derivative of the CFAM. Like the CFAM it presents a
+configuration table that enumerates the engines it contains and connects
+those engines to a local bus. It supports a limited set of engines: an FSI
+responder and a version 1 mailbox.
+
+The configuration table advertises the responder and the mailbox engines.
+The responder is backed by the FSI slave control registers; the mailbox
+provides a small block of scratch registers. The register block is exposed
+through each slave-ID view so that enumeration and normal access reach the
+same registers.
