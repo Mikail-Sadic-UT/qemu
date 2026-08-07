@@ -557,6 +557,7 @@ config ASPEED_SOC
     select MAX31785
     select UCD90320
     select FSI_APB2OPB_ASPEED
+    select UFS_SYSBUS
     select AT24C
     select PCI_EXPRESS
     select PCI_EXPRESS_ASPEED
